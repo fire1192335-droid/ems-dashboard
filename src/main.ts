@@ -282,7 +282,7 @@ function render() {
       <header class="hero">
         <div class="hero-copy">
           <p class="eyebrow">Fire Department Public Information</p>
-          <h1>救護耗材公開資訊頁</h1>
+          <h1>救護耗材控管儀表板</h1>
           <p class="hero-text">
             提供民眾與合作單位快速查詢救護耗材公開狀態、各分類更新時間與目前供應狀況。
           </p>
