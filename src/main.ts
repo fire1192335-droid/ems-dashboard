@@ -18,13 +18,13 @@ type FilterState = {
 };
 
 const categoryOrder = [
-  "A 自費耗材類",
-  "B 呼吸道類",
+  "A 自我防護類",
+  "B 呼吸道處置類",
   "C 創傷處置類",
   "D 靜脈注射類",
-  "E 輔助具類",
-  "F 特殊血類",
-  "G 消毒清潔類",
+  "E 輔助處置類",
+  "H 高級救護處置",
+  "I 心臟電擊去顫類",
 ] as const;
 
 const statusOrder: SupplyStatus[] = ["正常", "低庫存", "缺貨"];

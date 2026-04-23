@@ -88,12 +88,12 @@ https://你的帳號.github.io/你的-repo/
 
 ```json
 {
-  "category": "A 自費耗材類",
-  "itemCode": "A-001",
-  "name": "拋棄式急救手套",
+  "category": "A 自我防護類",
+  "itemCode": "0001",
+  "name": "手套(L)",
   "status": "正常",
   "updatedAt": "2026-04-18T09:00:00+08:00",
-  "note": "現場備量充足。"
+  "note": "對應試算表 A 類。"
 }
 ```
 

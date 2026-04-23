@@ -1,114 +1,114 @@
 [
   {
-    "category": "A 自費耗材類",
-    "itemCode": "A-001",
-    "name": "拋棄式急救手套",
+    "category": "A 自我防護類",
+    "itemCode": "0001",
+    "name": "手套(L)",
     "status": "正常",
     "updatedAt": "2026-04-18T09:00:00+08:00",
-    "note": "現場備量充足。"
+    "note": "對應試算表 A 類。"
   },
   {
-    "category": "A 自費耗材類",
-    "itemCode": "A-002",
-    "name": "成人三角巾",
-    "status": "低庫存",
-    "updatedAt": "2026-04-18T09:00:00+08:00",
-    "note": "已列入下批採購。"
-  },
-  {
-    "category": "B 呼吸道類",
-    "itemCode": "B-001",
-    "name": "口咽呼吸道組",
-    "status": "正常",
-    "updatedAt": "2026-04-18T09:10:00+08:00",
-    "note": "依常備量補足。"
-  },
-  {
-    "category": "B 呼吸道類",
-    "itemCode": "B-002",
-    "name": "鼻咽呼吸道組",
-    "status": "低庫存",
-    "updatedAt": "2026-04-18T09:10:00+08:00",
-    "note": "剩餘數量接近警戒。"
-  },
-  {
-    "category": "C 創傷處置類",
-    "itemCode": "C-001",
-    "name": "無菌紗布包",
-    "status": "正常",
-    "updatedAt": "2026-04-18T09:20:00+08:00",
-    "note": "每日盤點完成。"
-  },
-  {
-    "category": "C 創傷處置類",
-    "itemCode": "C-002",
-    "name": "止血帶",
+    "category": "A 自我防護類",
+    "itemCode": "0003",
+    "name": "無菌手套",
     "status": "缺貨",
-    "updatedAt": "2026-04-18T09:20:00+08:00",
-    "note": "待廠商補貨。"
+    "updatedAt": "2026-04-18T09:00:00+08:00",
+    "note": "試算表剩餘數量為 0。"
   },
   {
-    "category": "D 靜脈注射類",
-    "itemCode": "D-001",
-    "name": "留置針 No.20",
+    "category": "B 呼吸道處置類",
+    "itemCode": "0001",
+    "name": "口咽呼吸道(1組含5個尺寸)",
+    "status": "正常",
+    "updatedAt": "2026-04-18T09:10:00+08:00",
+    "note": "對應試算表 B 類。"
+  },
+  {
+    "category": "B 呼吸道處置類",
+    "itemCode": "0003",
+    "name": "潤滑膠(100包/盒)",
     "status": "低庫存",
-    "updatedAt": "2026-04-18T09:25:00+08:00",
-    "note": "優先補充品項。"
+    "updatedAt": "2026-04-18T09:10:00+08:00",
+    "note": "剩餘數量偏低，建議追蹤。"
+  },
+  {
+    "category": "C 創傷處置類",
+    "itemCode": "0001",
+    "name": "透氣膠帶",
+    "status": "正常",
+    "updatedAt": "2026-04-18T09:20:00+08:00",
+    "note": "對應試算表 C 類。"
+  },
+  {
+    "category": "C 創傷處置類",
+    "itemCode": "0007",
+    "name": "彈性繃帶(6英吋)",
+    "status": "低庫存",
+    "updatedAt": "2026-04-18T09:20:00+08:00",
+    "note": "剩餘數量不高。"
   },
   {
     "category": "D 靜脈注射類",
-    "itemCode": "D-002",
-    "name": "留置針 No.22",
+    "itemCode": "0002",
+    "name": "安全靜脈留置針 （No18）",
     "status": "正常",
     "updatedAt": "2026-04-18T09:25:00+08:00",
-    "note": "儲位已更新。"
+    "note": "對應試算表 D 類。"
   },
   {
-    "category": "E 輔助具類",
-    "itemCode": "E-001",
+    "category": "D 靜脈注射類",
+    "itemCode": "0003",
+    "name": "安全靜脈留置針 （No20）",
+    "status": "缺貨",
+    "updatedAt": "2026-04-18T09:25:00+08:00",
+    "note": "試算表剩餘數量為 0。"
+  },
+  {
+    "category": "E 輔助處置類",
+    "itemCode": "0001",
     "name": "搬運軟墊",
     "status": "正常",
     "updatedAt": "2026-04-18T09:30:00+08:00",
-    "note": "年度盤點正常。"
+    "note": "對應試算表 E 類。"
   },
   {
-    "category": "E 輔助具類",
-    "itemCode": "E-002",
+    "category": "E 輔助處置類",
+    "itemCode": "0003",
     "name": "瞳孔筆",
     "status": "缺貨",
     "updatedAt": "2026-04-18T09:30:00+08:00",
-    "note": "採購申請已送出。"
+    "note": "試算表剩餘數量為 0。"
   },
   {
-    "category": "F 特殊血類",
-    "itemCode": "F-001",
-    "name": "O 型陰性備援血液",
+    "category": "H 高級救護處置",
+    "itemCode": "0001",
+    "name": "Epinephrine",
     "status": "正常",
     "updatedAt": "2026-04-18T09:40:00+08:00",
-    "note": "冷藏設備監測正常。"
+    "note": "對應試算表 H 類。"
   },
   {
-    "category": "F 特殊血類",
-    "itemCode": "F-002",
-    "name": "特殊血型聯絡資料卡",
-    "status": "低庫存",
-    "updatedAt": "2026-04-18T09:40:00+08:00",
-    "note": "印製數量待補。"
-  },
-  {
-    "category": "G 消毒清潔類",
-    "itemCode": "G-001",
-    "name": "酒精棉片",
-    "status": "正常",
-    "updatedAt": "2026-04-18T09:45:00+08:00",
-    "note": "供應穩定。"
-  },
-  {
-    "category": "G 消毒清潔類",
-    "itemCode": "G-002",
-    "name": "高效消毒擦拭布",
+    "category": "H 高級救護處置",
+    "itemCode": "0006",
+    "name": "Nitroglycerine",
     "status": "缺貨",
+    "updatedAt": "2026-04-18T09:40:00+08:00",
+    "note": "試算表剩餘數量為 0。"
+  },
+  {
+    "category": "I 心臟電擊去顫類",
+    "itemCode": "0002",
+    "name": "AED成人電擊貼片(ZOLL)",
+    "status": "正常",
     "updatedAt": "2026-04-18T09:45:00+08:00",
-    "note": "已通知總務補貨。"
+    "note": "對應試算表 I 類。"
+  },
+  {
+    "category": "I 心臟電擊去顫類",
+    "itemCode": "0005",
+    "name": "AED兒童電擊貼片(ZOLL)",
+    "status": "低庫存",
+    "updatedAt": "2026-04-18T09:45:00+08:00",
+    "note": "剩餘數量偏低，建議追蹤。"
   }
 ]
