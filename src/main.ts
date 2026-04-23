@@ -279,6 +279,11 @@ function render() {
 
   root.innerHTML = `
     <div class="page-shell">
+      <nav class="top-nav" aria-label="網站導覽">
+        <a class="nav-link is-active" href="${import.meta.env.BASE_URL}">耗材儀表板</a>
+        <a class="nav-link" href="${import.meta.env.BASE_URL}trace.html">領取足跡 Prototype</a>
+      </nav>
+
       <header class="hero">
         <div class="hero-copy">
           <p class="eyebrow">Fire Department Public Information</p>
@@ -286,6 +291,9 @@ function render() {
           <p class="hero-text">
             提供民眾與合作單位快速查詢救護耗材公開狀態、各分類更新時間與目前供應狀況。
           </p>
+          <div class="hero-actions">
+            <a class="hero-link" href="${import.meta.env.BASE_URL}trace.html">查看領取足跡 Prototype</a>
+          </div>
         </div>
         <div class="hero-meta">
           <div class="meta-panel">
