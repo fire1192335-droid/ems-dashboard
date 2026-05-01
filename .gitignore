@@ -1,7 +1,11 @@
 .next
 node_modules
 .env.local
+.env
+.env.*
+!.env.example
 .vercel
+.firebase
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*

@@ -7,6 +7,9 @@
     "build": "vite build",
     "preview": "vite preview"
   },
+  "dependencies": {
+    "firebase": "^12.7.0"
+  },
   "devDependencies": {
     "@types/node": "^24.7.2",
     "typescript": "^5.9.3",

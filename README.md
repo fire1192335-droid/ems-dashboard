@@ -1,120 +1,21 @@
-# 救護耗材公開資訊頁
+# 救護耗材控管儀表板
 
-這是一個可直接部署到 **GitHub Pages** 的純靜態網站，使用 **Vite + TypeScript + HTML/CSS/JavaScript** 製作，所有資料皆來自本地 JSON 檔案，不依賴後端 API，也不需要任何私密金鑰。
+本專案目前是 **Vite + TypeScript + HTML/CSS/JavaScript** 的多頁靜態網站，不是 Next.js，也不是 React SPA。  
+現有頁面包含：
 
-資料來源檔案：
+- `index.html`：救護耗材儀表板首頁
+- `trace.html`：領取足跡 Prototype
 
-- `public/data/public-supplies.json`
+這次調整以 **最小修改** 為原則，保留既有畫面與 JSON 資料來源，只補上 Firebase Hosting 所需設定，並預留未來串接 Firestore 的資料層。
 
-## 專案特色
+## 目前技術棧
 
-- 純靜態網站，適合 GitHub Pages
-- 使用本地 JSON 作為公開資料來源
-- 提供更新時間、摘要卡片、分類區塊、搜尋與篩選
-- 缺貨顯示紅色、低庫存顯示黃色、正常顯示綠色
-- 手機與桌機都可閱讀
-
-## 1. 如何在本機執行
-
-```bash
-npm install
-npm run dev
-```
-
-開啟瀏覽器前往：
-
-- [http://localhost:5173](http://localhost:5173)
-
-若要測試正式輸出：
-
-```bash
-npm run build
-npm run preview
-```
-
-## 2. 如何建立 GitHub repo
-
-1. 前往 [GitHub](https://github.com/)
-2. 點選右上角 `New repository`
-3. 輸入 repo 名稱，例如 `ems-public-supplies`
-4. 建立 repository
-
-## 3. 如何推送到 GitHub
-
-如果本機尚未初始化 git：
-
-```bash
-git init
-git branch -M main
-git add .
-git commit -m "feat: add public supplies site"
-git remote add origin https://github.com/你的帳號/你的-repo.git
-git push -u origin main
-```
-
-如果你已經有既有 repo，只要：
-
-```bash
-git add .
-git commit -m "feat: update public supplies site"
-git push
-```
-
-## 4. 如何開啟 GitHub Pages
-
-本專案已內建 GitHub Actions workflow：`.github/workflows/deploy.yml`
-
-開啟方式：
-
-1. 將程式碼推到 GitHub 的 `main` 分支
-2. 到 GitHub repo 的 `Settings`
-3. 點選左側 `Pages`
-4. 在 `Build and deployment` 中將 `Source` 設為 `GitHub Actions`
-5. 回到 repo 的 `Actions` 頁面，等待 `Deploy to GitHub Pages` workflow 完成
-
-完成後網址通常會是：
-
-```text
-https://你的帳號.github.io/你的-repo/
-```
-
-## 5. 如何更新 public-supplies.json
-
-請直接編輯：
-
-- `public/data/public-supplies.json`
-
-每筆資料格式如下：
-
-```json
-{
-  "category": "A 自我防護類",
-  "itemCode": "0001",
-  "name": "手套(L)",
-  "status": "正常",
-  "updatedAt": "2026-04-18T09:00:00+08:00",
-  "note": "對應試算表 A 類。"
-}
-```
-
-欄位說明：
-
-- `category`：耗材分類
-- `itemCode`：品項代碼
-- `name`：品名
-- `status`：只能是 `正常`、`低庫存`、`缺貨`
-- `updatedAt`：更新時間
-- `note`：備註
-
-更新資料後重新推送：
-
-```bash
-git add public/data/public-supplies.json
-git commit -m "chore: update public supplies data"
-git push
-```
-
-GitHub Pages 就會重新部署最新版本。
+- Vite
+- TypeScript
+- HTML / CSS / JavaScript
+- 本地 JSON 資料
+- Firebase Hosting 部署設定
+- Firebase Web App 初始化服務層
 
 ## 專案結構
 
@@ -122,16 +23,293 @@ GitHub Pages 就會重新部署最新版本。
 public/
   data/
     public-supplies.json
+    trace-records.json
 src/
   main.ts
+  trace.ts
   style.css
+  services/
+    firebase.ts
 index.html
+trace.html
 vite.config.ts
-.github/workflows/deploy.yml
+firebase.json
+.firebaserc.example
+.env.example
+firestore.rules
 ```
 
-## GitHub Pages 部署重點
+## 核心資料欄位
 
-- 本站為純靜態輸出，沒有後端 API
-- 不使用 Service Account、API Key 或任何私密憑證
-- `vite.config.ts` 已設定相對路徑，可直接部署到 GitHub Pages
+領取足跡資料保留或預留以下欄位：
+
+- 領取時間
+- 領取時段
+- 類別
+- 耗材編號
+- 耗材名稱
+- 領取數量
+- 單位
+- 領取人
+- 所屬單位
+- 車號
+- 案件編號
+- 用途
+- 領取後庫存
+- 備註
+
+目前前端仍以既有 `public/data/trace-records.json` 為主，不破壞原畫面。  
+未來若切換到 Firestore，可直接沿用 `src/services/firebase.ts` 內的欄位型別與選單常數。
+
+## 固定下拉選單
+
+### 類別
+
+- A 自我防護類
+- B 呼吸道處置類
+- C 創傷處置類
+- D 靜脈注射類
+- E 輔助處置類
+- H 高級救護處置
+- I 心臟電擊去顫類
+
+### 用途
+
+- 出勤使用
+- 訓練使用
+- 補充車備
+- 盤點調整
+- 其他
+
+### 所屬單位
+
+- 第一分隊
+- 第二分隊
+- 第三分隊
+- 第四分隊
+
+## 本機啟動
+
+### Windows PowerShell
+
+```powershell
+npm install
+npm run dev
+```
+
+Vite 預設網址通常是：
+
+```text
+http://localhost:5173/
+```
+
+若 `5173` 被占用，Vite 會自動改用其他埠號，請以終端機實際輸出為準。
+
+## 建置
+
+```powershell
+npm run build
+```
+
+建置完成後，部署用資料夾為：
+
+```text
+dist
+```
+
+本次已實際驗證 `npm run build` 可成功產出 `dist/`。
+
+## Firebase 設定檔
+
+本次新增或調整的 Firebase 相關檔案：
+
+- `firebase.json`
+- `.firebaserc.example`
+- `.env.example`
+- `src/services/firebase.ts`
+- `firestore.rules`
+
+## Firebase Web App 環境變數
+
+先複製範本：
+
+```powershell
+Copy-Item .env.example .env.local
+```
+
+再把 Firebase Console 的 Web App 設定值填入 `.env.local`。
+
+範例欄位如下：
+
+```env
+VITE_FIREBASE_API_KEY=your_firebase_api_key
+VITE_FIREBASE_AUTH_DOMAIN=your-project-id.firebaseapp.com
+VITE_FIREBASE_PROJECT_ID=your-project-id
+VITE_FIREBASE_STORAGE_BUCKET=your-project-id.firebasestorage.app
+VITE_FIREBASE_MESSAGING_SENDER_ID=your_messaging_sender_id
+VITE_FIREBASE_APP_ID=your_firebase_app_id
+VITE_FIREBASE_MEASUREMENT_ID=your_measurement_id_optional
+```
+
+注意：
+
+- 不要把真實設定直接寫死在程式碼中
+- `.env.local` 不要提交到 Git
+- `.env.example` 只保留欄位名稱與假值
+
+## 部署到 Firebase Hosting
+
+### 1. 安裝套件
+
+```powershell
+npm install
+```
+
+### 2. 建置
+
+```powershell
+npm run build
+```
+
+### 3. 安裝 Firebase CLI
+
+```powershell
+npm install -g firebase-tools
+```
+
+### 4. 登入 Firebase
+
+```powershell
+firebase login
+```
+
+### 5. 初始化 Hosting
+
+```powershell
+firebase init hosting
+```
+
+建議回答如下：
+
+- `Use an existing project`：選你的 Firebase 專案
+- `public directory`：填 `dist`
+- `Configure as a single-page app`：選 `No`
+- `Set up automatic builds and deploys with GitHub`：第一版可選 `No`
+
+### 6. 部署
+
+```powershell
+firebase deploy
+```
+
+## 為什麼 Firebase Hosting 要指向 `dist`
+
+因為本專案是 Vite，執行 `npm run build` 之後，正式可部署檔案會輸出到：
+
+- `dist/index.html`
+- `dist/trace.html`
+- `dist/assets/*`
+
+所以 `firebase.json` 的 `hosting.public` 必須設定成 `dist`。
+
+## Firestore 預留說明
+
+這一版 **只做 Firebase Hosting**，符合 Firebase Spark 免費方案可支援的範圍。  
+目前沒有實作：
+
+- Cloud Functions
+- 需要 Blaze 的付費服務
+- 直接從前端寫入 Firestore 的正式功能
+
+但已預留：
+
+- `src/services/firebase.ts`
+  - Firebase App / Firestore 初始化
+  - 類別、用途、所屬單位選單常數
+  - 領取足跡資料型別
+- `firestore.rules`
+  - 目前採最保守的 `allow read, write: if false;`
+  - 只是測試用安全預留檔，避免任何人任意讀寫
+
+如果未來要正式接 Firestore，請至少補上：
+
+- Firebase Authentication
+- 依角色限制的 Firestore Security Rules
+- 管理端與公開頁分流
+
+## 常見部署錯誤與排除
+
+### 1. `firebase` 指令找不到
+
+請先安裝 Firebase CLI：
+
+```powershell
+npm install -g firebase-tools
+```
+
+若已安裝仍找不到，請重新開 PowerShell。
+
+### 2. `Directory 'dist' for Hosting does not exist`
+
+代表還沒先 build，請先執行：
+
+```powershell
+npm run build
+```
+
+### 3. 部署後畫面空白
+
+請檢查：
+
+- `firebase.json` 的 `public` 是否為 `dist`
+- `dist/index.html` 是否存在
+- `dist/trace.html` 是否存在
+- `dist/assets/*` 是否有正常輸出
+
+### 4. `.env.local` 沒生效
+
+請檢查：
+
+- 檔名是否為 `.env.local`
+- 變數名稱是否都以 `VITE_` 開頭
+- 修改後是否重新執行 `npm run dev` 或 `npm run build`
+
+### 5. `firebase deploy` 成功但資料沒更新
+
+請重新執行：
+
+```powershell
+npm run build
+firebase deploy
+```
+
+並清除瀏覽器快取後再檢查。
+
+## 本次修改原因
+
+- `firebase.json`
+  - 指定 Firebase Hosting 以 `dist` 作為部署目錄
+  - 補上靜態資源快取策略
+- `.firebaserc.example`
+  - 提供 Firebase 專案 ID 範本，避免把真實專案寫死
+- `.env.example`
+  - 提供 Firebase Web App 所需環境變數欄位
+- `src/services/firebase.ts`
+  - 建立未來串接 Firestore 的服務層
+  - 集中管理資料欄位與選單常數
+- `firestore.rules`
+  - 先提供保守的安全規則範本，避免誤開放讀寫
+- `package.json`
+  - 加入 `firebase` 套件
+  - 保留 `dev`、`build`、`preview` scripts
+- `.gitignore`
+  - 忽略 `.env.local`、`.firebase` 等本機或敏感設定
+  - 保留 `.env.example` 供版本控制
+- `README.md`
+  - 補齊 Windows 本機啟動、建置、Firebase Hosting 部署與排錯說明
+
+## 官方文件
+
+- Firebase Hosting: [https://firebase.google.com/docs/hosting](https://firebase.google.com/docs/hosting)
+- Firebase Hosting Quickstart: [https://firebase.google.com/docs/hosting/quickstart](https://firebase.google.com/docs/hosting/quickstart)
+- Firebase Web Setup: [https://firebase.google.com/docs/web/setup](https://firebase.google.com/docs/web/setup)
