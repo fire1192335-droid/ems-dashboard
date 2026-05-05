@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0f766e" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <title>登入 | 救護耗材控管儀表板</title>
+    <meta
+      name="description"
+      content="救護耗材控管儀表板登入頁，使用 Firebase Authentication Email/Password。"
+    />
+  </head>
+  <body>
+    <div id="app">
+      <div class="bootstrap-shell">
+        <div class="bootstrap-card">
+          <div class="bootstrap-nav">
+            <a class="bootstrap-link" href="./index.html">儀表板</a>
+            <a class="bootstrap-link" href="./trace.html">領用紀錄</a>
+            <a class="bootstrap-link is-active" href="./login.html">登入</a>
+          </div>
+          <p class="bootstrap-eyebrow">EMS AUTHENTICATION</p>
+          <h1>系統登入</h1>
+          <p class="bootstrap-text">請使用 Firebase Authentication 的 Email / Password 帳號登入。</p>
+          <p class="bootstrap-subtext">若帳號尚未建立，請先由 Firebase Console 建立使用者。</p>
+        </div>
+      </div>
+    </div>
+    <noscript>
+      <div class="bootstrap-shell">
+        <div class="bootstrap-card">
+          <p class="bootstrap-eyebrow">EMS AUTHENTICATION</p>
+          <h1>系統登入</h1>
+          <p class="bootstrap-text">此頁面需要啟用 JavaScript 才能登入。</p>
+        </div>
+      </div>
+    </noscript>
+    <script type="module" src="/src/login.ts"></script>
+  </body>
+</html>

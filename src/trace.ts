@@ -1,37 +1,22 @@
 import "./style.css";
 
-type TraceRecord = {
-  recordId: string;
-  createdAt: string;
-  category: string;
-  itemCode: string;
-  itemName: string;
-  quantity: number;
-  unit: string;
-  takenBy: string;
-  team: string;
-  vehicleNo: string;
-  caseNo: string;
-  purpose: string;
-  stockAfter: number | null;
-  note: string;
-};
-
-type TraceResponse = {
-  meta: {
-    sheetName: string;
-    generatedAt: string;
-    total: number;
-  };
-  records: TraceRecord[];
-};
-
-type TraceFilters = {
-  search: string;
-  category: string;
-  team: string;
-  period: "all" | "today" | "week";
-};
+import { initPwaFeatures } from "./pwa";
+import { observeAuthSession, roleLabel, signOutCurrentUser, type AuthSession } from "./services/authService";
+import {
+  categoryChoicesHtml,
+  purposeChoicesHtml,
+  stationChoicesHtml,
+  type SupplyRecord,
+  type UsageRecord,
+} from "./services/firebase";
+import { listSupplies } from "./services/supplyService";
+import {
+  createUsageRecord,
+  deleteUsageRecord,
+  listUsageRecords,
+  updateUsageRecord,
+  type UsageRecordFormInput,
+} from "./services/usageRecordService";
 
 const root = document.querySelector<HTMLDivElement>("#app");
 
@@ -39,21 +24,96 @@ if (!root) {
   throw new Error("Missing #app root element.");
 }
 
-const state: {
-  records: TraceRecord[];
-  filters: TraceFilters;
+initPwaFeatures();
+
+type UsageFilters = {
+  dateFrom: string;
+  dateTo: string;
+  category: string;
+  station: string;
+  vehicleNo: string;
+  purpose: string;
+  keyword: string;
+};
+
+type UsageFormState = {
+  receiveDate: string;
+  receiveTime: string;
+  receivePeriod: string;
+  category: string;
+  itemCode: string;
+  itemName: string;
+  quantity: string;
+  unit: string;
+  receiver: string;
+  station: string;
+  vehicleNo: string;
+  caseNo: string;
+  purpose: string;
+  note: string;
+};
+
+type UsageState = {
+  session: AuthSession | null;
+  supplies: SupplyRecord[];
+  usageRecords: UsageRecord[];
+  filters: UsageFilters;
+  form: UsageFormState;
+  editingRecordId: string | null;
+  isLoading: boolean;
   error: string | null;
-  generatedAt: string;
-} = {
-  records: [],
-  filters: {
-    search: "",
-    category: "全部類別",
-    team: "全部單位",
-    period: "all",
-  },
+  info: string | null;
+};
+
+const defaultFilters: UsageFilters = {
+  dateFrom: "",
+  dateTo: "",
+  category: "全部類別",
+  station: "全部單位",
+  vehicleNo: "",
+  purpose: "全部用途",
+  keyword: "",
+};
+
+function nowDate() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function nowTime() {
+  return new Date().toLocaleTimeString("zh-TW", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+}
+
+const defaultForm: UsageFormState = {
+  receiveDate: nowDate(),
+  receiveTime: nowTime(),
+  receivePeriod: "白班",
+  category: "A 自我防護類",
+  itemCode: "",
+  itemName: "",
+  quantity: "1",
+  unit: "",
+  receiver: "",
+  station: "第一分隊",
+  vehicleNo: "",
+  caseNo: "",
+  purpose: "出勤使用",
+  note: "",
+};
+
+const state: UsageState = {
+  session: null,
+  supplies: [],
+  usageRecords: [],
+  filters: { ...defaultFilters },
+  form: { ...defaultForm },
+  editingRecordId: null,
+  isLoading: true,
   error: null,
-  generatedAt: "",
+  info: null,
 };
 
 function escapeHtml(value: string) {
@@ -65,7 +125,7 @@ function escapeHtml(value: string) {
     .replaceAll("'", "&#39;");
 }
 
-function formatDate(value: string) {
+function formatDateTime(value: string) {
   const parsed = new Date(value);
 
   if (Number.isNaN(parsed.getTime())) {
@@ -82,141 +142,207 @@ function formatDate(value: string) {
   });
 }
 
-function getCategoryOptions() {
-  return [...new Set(state.records.map((record) => record.category))];
+function showLoading(message: string) {
+  root.innerHTML = `
+    <div class="bootstrap-shell">
+      <div class="bootstrap-card">
+        <p class="bootstrap-eyebrow">EMS INTERNAL USAGE RECORDS</p>
+        <h1>領用紀錄管理</h1>
+        <p class="bootstrap-text">${escapeHtml(message)}</p>
+      </div>
+    </div>
+  `;
 }
 
-function getTeamOptions() {
-  return [...new Set(state.records.map((record) => record.team))];
+function redirectToLogin() {
+  window.location.href = `${import.meta.env.BASE_URL}login.html?next=trace.html`;
 }
 
-function isWithinPeriod(record: TraceRecord) {
-  if (state.filters.period === "all") {
-    return true;
+function isAdmin() {
+  return state.session?.profile?.role === "admin";
+}
+
+function canWrite() {
+  return state.session?.profile?.role === "admin" || state.session?.profile?.role === "user";
+}
+
+function actorIdentity() {
+  if (!state.session?.user.email) {
+    throw new Error("目前登入帳號缺少 email。");
   }
 
-  const createdAt = new Date(record.createdAt).getTime();
+  return {
+    uid: state.session.user.uid,
+    email: state.session.user.email,
+  };
+}
 
-  if (Number.isNaN(createdAt)) {
-    return true;
+function setSupplyFieldsByItemCode(itemCode: string) {
+  const supply = state.supplies.find((item) => item.itemCode === itemCode);
+
+  if (!supply) {
+    state.form.itemCode = "";
+    state.form.itemName = "";
+    state.form.unit = "";
+    return;
   }
 
-  const generatedAt = state.generatedAt ? new Date(state.generatedAt).getTime() : Date.now();
-  const oneDay = 24 * 60 * 60 * 1000;
+  state.form.category = supply.category;
+  state.form.itemCode = supply.itemCode;
+  state.form.itemName = supply.itemName;
+  state.form.unit = supply.unit;
+}
 
-  if (state.filters.period === "today") {
-    return generatedAt - createdAt <= oneDay;
+function resetForm() {
+  state.form = {
+    ...defaultForm,
+    receiveDate: nowDate(),
+    receiveTime: nowTime(),
+    station: state.session?.profile?.station ?? "第一分隊",
+    receiver: state.session?.profile?.displayName ?? "",
+  };
+  state.editingRecordId = null;
+  const firstSupply = state.supplies[0];
+
+  if (firstSupply) {
+    setSupplyFieldsByItemCode(firstSupply.itemCode);
+  }
+}
+
+function getSelectedSupply() {
+  return state.supplies.find((item) => item.itemCode === state.form.itemCode) ?? null;
+}
+
+function getStockPreview() {
+  const supply = getSelectedSupply();
+  const quantity = Number(state.form.quantity);
+  const editingRecord = state.editingRecordId
+    ? state.usageRecords.find((record) => record.id === state.editingRecordId)
+    : null;
+
+  if (!supply || !Number.isFinite(quantity)) {
+    return "-";
   }
 
-  return generatedAt - createdAt <= 7 * oneDay;
+  const baseStock =
+    editingRecord && editingRecord.itemCode === supply.itemCode
+      ? supply.currentStock + editingRecord.quantity
+      : supply.currentStock;
+
+  return String(baseStock - quantity);
+}
+
+function matchesDateRange(record: UsageRecord) {
+  if (state.filters.dateFrom && record.receiveDate < state.filters.dateFrom) {
+    return false;
+  }
+
+  if (state.filters.dateTo && record.receiveDate > state.filters.dateTo) {
+    return false;
+  }
+
+  return true;
 }
 
 function getFilteredRecords() {
-  const keyword = state.filters.search.trim().toLowerCase();
+  const keyword = state.filters.keyword.trim().toLowerCase();
+  const vehicleKeyword = state.filters.vehicleNo.trim().toLowerCase();
 
-  return state.records.filter((record) => {
+  return state.usageRecords.filter((record) => {
     const matchesKeyword = keyword
-      ? [record.itemName, record.itemCode, record.takenBy, record.caseNo, record.vehicleNo]
+      ? [
+          record.itemCode,
+          record.itemName,
+          record.receiver,
+          record.caseNo,
+          record.vehicleNo,
+          record.station,
+        ]
           .filter(Boolean)
           .some((field) => field.toLowerCase().includes(keyword))
       : true;
 
     const matchesCategory =
       state.filters.category === "全部類別" || record.category === state.filters.category;
-    const matchesTeam = state.filters.team === "全部單位" || record.team === state.filters.team;
+    const matchesStation =
+      state.filters.station === "全部單位" || record.station === state.filters.station;
+    const matchesVehicle = vehicleKeyword
+      ? record.vehicleNo.toLowerCase().includes(vehicleKeyword)
+      : true;
+    const matchesPurpose =
+      state.filters.purpose === "全部用途" || record.purpose === state.filters.purpose;
 
-    return matchesKeyword && matchesCategory && matchesTeam && isWithinPeriod(record);
+    return (
+      matchesKeyword &&
+      matchesCategory &&
+      matchesStation &&
+      matchesVehicle &&
+      matchesPurpose &&
+      matchesDateRange(record)
+    );
   });
 }
 
-function getDistinctVehicles(records: TraceRecord[]) {
-  return new Set(records.map((record) => record.vehicleNo).filter(Boolean)).size;
+function getTodayRecords() {
+  const today = nowDate();
+  return state.usageRecords.filter((record) => record.receiveDate === today);
 }
 
-function getDistinctTakers(records: TraceRecord[]) {
-  return new Set(records.map((record) => record.takenBy).filter(Boolean)).size;
+function getLowStockSupplies() {
+  return state.supplies.filter((supply) => supply.currentStock <= supply.safetyStock);
 }
 
-function getCaseLinkedCount(records: TraceRecord[]) {
-  return new Set(records.map((record) => record.caseNo).filter(Boolean)).size;
-}
+async function refreshData() {
+  state.isLoading = true;
+  render();
 
-function getRiskCount(records: TraceRecord[]) {
-  return records.filter((record) => record.stockAfter === 0 || record.stockAfter === 4).length;
-}
+  try {
+    const [supplies, usageRecords] = await Promise.all([listSupplies(), listUsageRecords()]);
 
-function getPendingConfirmCount(records: TraceRecord[]) {
-  return records.filter(
-    (record) =>
-      record.stockAfter === 0 ||
-      record.note.includes("補登") ||
-      record.note.includes("待") ||
-      record.purpose === "補充車備",
-  ).length;
-}
+    state.supplies = supplies;
+    state.usageRecords = usageRecords;
+    state.error = null;
 
-function getTopItems(records: TraceRecord[]) {
-  const totals = new Map<string, { itemName: string; total: number; category: string }>();
-
-  for (const record of records) {
-    const key = `${record.itemCode}-${record.itemName}`;
-    const existing = totals.get(key);
-
-    if (existing) {
-      existing.total += record.quantity;
-      continue;
+    if (!state.editingRecordId && !state.form.itemCode && state.supplies[0]) {
+      setSupplyFieldsByItemCode(state.supplies[0].itemCode);
     }
+  } catch (error) {
+    state.error = error instanceof Error ? error.message : "無法讀取 Firestore 領用紀錄。";
+  } finally {
+    state.isLoading = false;
+    render();
+  }
+}
 
-    totals.set(key, {
-      itemName: record.itemName,
-      total: record.quantity,
-      category: record.category,
-    });
+function renderHeader() {
+  if (!state.session?.profile || !state.session.user.email) {
+    return "";
   }
 
-  return [...totals.values()].sort((a, b) => b.total - a.total).slice(0, 4);
+  return `
+    <nav class="top-nav" aria-label="系統導覽">
+      <a class="nav-link" href="${import.meta.env.BASE_URL}">儀表板</a>
+      <a class="nav-link is-active" href="${import.meta.env.BASE_URL}trace.html">領用紀錄</a>
+      <div class="session-bar">
+        <span class="session-pill">${escapeHtml(state.session.user.email)}</span>
+        <span class="session-pill">${escapeHtml(state.session.profile.station)}</span>
+        <span class="${state.session.profile.role === "admin" ? "status status-danger" : state.session.profile.role === "user" ? "status status-warning" : "status status-normal"}">${escapeHtml(roleLabel(state.session.profile.role))}</span>
+        <button id="logoutButton" class="secondary-button" type="button">登出</button>
+      </div>
+    </nav>
+  `;
 }
 
-function getRecentAlerts(records: TraceRecord[]) {
-  return records
-    .filter((record) => record.stockAfter === 0 || record.stockAfter === 4)
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-    .slice(0, 4);
-}
-
-function renderSummary(records: TraceRecord[]) {
-  const todayRecords = state.records.filter((record) => {
-    const generatedAt = state.generatedAt ? new Date(state.generatedAt).getTime() : Date.now();
-    const createdAt = new Date(record.createdAt).getTime();
-
-    return !Number.isNaN(createdAt) && generatedAt - createdAt <= 24 * 60 * 60 * 1000;
-  });
+function renderSummaryCards() {
+  const todayRecords = getTodayRecords();
+  const todayQuantity = todayRecords.reduce((sum, record) => sum + record.quantity, 0);
+  const lowStockCount = getLowStockSupplies().length;
 
   const cards = [
-    {
-      title: "今日領取筆數",
-      value: `${todayRecords.length}`,
-      tone: "tone-normal",
-      badge: "Today",
-    },
-    {
-      title: "目前篩選結果",
-      value: `${records.length}`,
-      tone: "tone-warning",
-      badge: "Filtered",
-    },
-    {
-      title: "涉及車輛數",
-      value: `${getDistinctVehicles(records)}`,
-      tone: "tone-normal",
-      badge: "Vehicles",
-    },
-    {
-      title: "交班待確認",
-      value: `${getPendingConfirmCount(records)}`,
-      tone: "tone-danger",
-      badge: "Pending",
-    },
+    { title: "今日領用次數", value: `${todayRecords.length}`, tone: "tone-normal", badge: "Today" },
+    { title: "今日領用總數", value: `${todayQuantity}`, tone: "tone-normal", badge: "Quantity" },
+    { title: "低庫存品項數", value: `${lowStockCount}`, tone: lowStockCount > 0 ? "tone-danger" : "tone-warning", badge: "Alert" },
+    { title: "篩選後紀錄數", value: `${getFilteredRecords().length}`, tone: "tone-warning", badge: "Filtered" },
   ];
 
   return cards
@@ -234,486 +360,525 @@ function renderSummary(records: TraceRecord[]) {
     .join("");
 }
 
-function renderControlRibbon(records: TraceRecord[]) {
-  const cards = [
-    {
-      label: "當班領取人員",
-      value: `${getDistinctTakers(records)} 人`,
-      note: "可快速確認是否涉及多車多員共同領取",
-    },
-    {
-      label: "關聯案件數",
-      value: `${getCaseLinkedCount(records)} 件`,
-      note: "方便回頭追查案件與耗材使用軌跡",
-    },
-    {
-      label: "高風險異動",
-      value: `${getRiskCount(records)} 筆`,
-      note: "含領後缺貨與低庫存邊界值",
-    },
-    {
-      label: "值班重點",
-      value: getPendingConfirmCount(records) > 0 ? "需交班" : "已清點",
-      note: "示範內部頁可加上交班註記與追蹤機制",
-    },
-  ];
+function renderLowStockAlerts() {
+  const supplies = getLowStockSupplies().slice(0, 6);
 
   return `
-    <section class="section-block trace-ribbon-block">
+    <section class="section-block section-alert">
       <div class="section-heading">
         <div>
-          <p class="section-kicker">CONTROL RIBBON</p>
-          <h2>值班控管帶</h2>
+          <p class="section-kicker">STOCK RISK</p>
+          <h2>低庫存提醒</h2>
         </div>
-        <p class="section-helper">這一排更接近正式內部系統首頁的作業訊號，不只是查詢，而是提示你下一步要看哪裡。</p>
       </div>
-      <div class="trace-ribbon-grid">
-        ${cards
-          .map(
-            (card) => `
-              <article class="trace-ribbon-card">
-                <p>${card.label}</p>
-                <strong>${card.value}</strong>
-                <span>${card.note}</span>
-              </article>
-            `,
-          )
-          .join("")}
+      ${
+        supplies.length === 0
+          ? `<div class="empty-state">目前沒有低庫存或缺貨項目。</div>`
+          : `<div class="alert-list">
+              ${supplies
+                .map(
+                  (supply) => `
+                    <article class="alert-card">
+                      <div>
+                        <strong>${escapeHtml(supply.itemName)}</strong>
+                        <p>${escapeHtml(supply.itemCode)} ・ ${escapeHtml(supply.category)}</p>
+                      </div>
+                      <div class="alert-values">
+                        <span class="${supply.status === "缺貨" ? "status status-danger" : "status status-warning"}">${escapeHtml(supply.status)}</span>
+                        <b>${supply.currentStock} / 安全 ${supply.safetyStock}</b>
+                      </div>
+                    </article>
+                  `,
+                )
+                .join("")}
+            </div>`
+      }
+    </section>
+  `;
+}
+
+function renderFilters() {
+  return `
+    <section class="section-block">
+      <div class="section-heading section-heading-stack">
+        <div>
+          <p class="section-kicker">FILTERS</p>
+          <h2>查詢條件</h2>
+        </div>
+        <div class="filters-grid filters-grid-wide">
+          <label class="field">
+            <span>開始日期</span>
+            <input id="filterDateFrom" type="date" value="${escapeHtml(state.filters.dateFrom)}" />
+          </label>
+          <label class="field">
+            <span>結束日期</span>
+            <input id="filterDateTo" type="date" value="${escapeHtml(state.filters.dateTo)}" />
+          </label>
+          <label class="field">
+            <span>類別</span>
+            <select id="filterCategory">
+              <option value="全部類別">全部類別</option>
+              ${categoryChoicesHtml(state.filters.category)}
+            </select>
+          </label>
+          <label class="field">
+            <span>所屬單位</span>
+            <select id="filterStation">
+              <option value="全部單位">全部單位</option>
+              ${stationChoicesHtml(state.filters.station)}
+            </select>
+          </label>
+          <label class="field">
+            <span>車號</span>
+            <input id="filterVehicleNo" value="${escapeHtml(state.filters.vehicleNo)}" placeholder="例如 91車" />
+          </label>
+          <label class="field">
+            <span>用途</span>
+            <select id="filterPurpose">
+              <option value="全部用途">全部用途</option>
+              <option value="出勤使用" ${state.filters.purpose === "出勤使用" ? "selected" : ""}>出勤使用</option>
+              <option value="訓練使用" ${state.filters.purpose === "訓練使用" ? "selected" : ""}>訓練使用</option>
+              <option value="補充車備" ${state.filters.purpose === "補充車備" ? "selected" : ""}>補充車備</option>
+              <option value="盤點調整" ${state.filters.purpose === "盤點調整" ? "selected" : ""}>盤點調整</option>
+              <option value="其他" ${state.filters.purpose === "其他" ? "selected" : ""}>其他</option>
+            </select>
+          </label>
+          <label class="field field-wide">
+            <span>耗材名稱或編號</span>
+            <input id="filterKeyword" type="search" value="${escapeHtml(state.filters.keyword)}" placeholder="搜尋耗材、領取人、案件編號" />
+          </label>
+          <button id="resetFiltersButton" class="reset-button" type="button">重設條件</button>
+        </div>
       </div>
     </section>
   `;
 }
 
-function renderRows(records: TraceRecord[]) {
-  return records
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-    .map((record) => {
-      const riskClass =
-        record.stockAfter === 0
-          ? "status status-danger"
-          : record.stockAfter === 4
-            ? "status status-warning"
-            : "status status-normal";
+function renderFormSection() {
+  if (!canWrite()) {
+    return "";
+  }
 
-      const riskLabel =
-        record.stockAfter === 0 ? "缺貨風險" : record.stockAfter === 4 ? "低庫存注意" : "正常";
-
-      return `
-        <tr>
-          <td data-label="時間">${escapeHtml(formatDate(record.createdAt))}</td>
-          <td data-label="耗材">
-            <div class="name-cell">
-              <strong>${escapeHtml(record.itemName)}</strong>
-              <span>${escapeHtml(record.itemCode)} ・ ${escapeHtml(record.category)}</span>
-            </div>
-          </td>
-          <td data-label="領取資訊">
-            <div class="trace-inline-meta">
-              <strong>${escapeHtml(String(record.quantity))}${escapeHtml(record.unit)}</strong>
-              <span>${escapeHtml(record.purpose)}</span>
-            </div>
-          </td>
-          <td data-label="領取人">${escapeHtml(record.takenBy)}</td>
-          <td data-label="單位 / 車號">
-            <div class="trace-inline-meta">
-              <strong>${escapeHtml(record.team)}</strong>
-              <span>${escapeHtml(record.vehicleNo || "-")}</span>
-            </div>
-          </td>
-          <td data-label="案件 / 庫存">
-            <div class="trace-inline-meta">
-              <strong>${escapeHtml(record.caseNo || "-")}</strong>
-              <span>領後庫存：${record.stockAfter ?? "-"}</span>
-            </div>
-          </td>
-          <td data-label="風險">
-            <span class="${riskClass}">${riskLabel}</span>
-          </td>
-        </tr>
-      `;
-    })
-    .join("");
-}
-
-function renderMobileCards(records: TraceRecord[]) {
-  return records
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-    .map((record) => {
-      const riskClass =
-        record.stockAfter === 0
-          ? "status status-danger"
-          : record.stockAfter === 4
-            ? "status status-warning"
-            : "status status-normal";
-
-      const riskLabel =
-        record.stockAfter === 0 ? "缺貨風險" : record.stockAfter === 4 ? "低庫存注意" : "正常";
-
-      return `
-        <article class="mobile-card">
-          <div class="mobile-card-top">
-            <div>
-              <p class="mobile-category">${escapeHtml(record.category)}</p>
-              <h3>${escapeHtml(record.itemName)}</h3>
-              <p class="mobile-code">${escapeHtml(record.itemCode)} ・ ${escapeHtml(record.takenBy)}</p>
-            </div>
-            <span class="${riskClass}">${riskLabel}</span>
-          </div>
-          <dl class="mobile-meta">
-            <div>
-              <dt>時間</dt>
-              <dd>${escapeHtml(formatDate(record.createdAt))}</dd>
-            </div>
-            <div>
-              <dt>數量 / 用途</dt>
-              <dd>${escapeHtml(String(record.quantity))}${escapeHtml(record.unit)} ・ ${escapeHtml(record.purpose)}</dd>
-            </div>
-            <div>
-              <dt>單位 / 車號</dt>
-              <dd>${escapeHtml(record.team)} ${escapeHtml(record.vehicleNo || "")}</dd>
-            </div>
-            <div>
-              <dt>案件 / 領後庫存</dt>
-              <dd>${escapeHtml(record.caseNo || "-")} ・ ${record.stockAfter ?? "-"}</dd>
-            </div>
-          </dl>
-        </article>
-      `;
-    })
-    .join("");
-}
-
-function renderSpotlight(records: TraceRecord[]) {
-  const topItems = getTopItems(records);
-  const alerts = getRecentAlerts(records);
-  const handoverItems = records
-    .filter(
-      (record) =>
-        record.stockAfter === 0 ||
-        record.note.includes("補登") ||
-        record.note.includes("待") ||
-        record.purpose === "補充車備",
+  const supplyOptions = state.supplies
+    .filter((supply) => supply.category === state.form.category)
+    .map(
+      (supply) =>
+        `<option value="${escapeHtml(supply.itemCode)}" ${state.form.itemCode === supply.itemCode ? "selected" : ""}>${escapeHtml(supply.itemCode)}｜${escapeHtml(supply.itemName)}</option>`,
     )
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-    .slice(0, 4);
-  const caseTimeline = records
-    .filter((record) => record.caseNo)
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-    .slice(0, 4);
+    .join("");
+
+  const selectedSupply = getSelectedSupply();
 
   return `
     <section class="section-block">
       <div class="section-heading">
         <div>
-          <p class="section-kicker">SPOTLIGHT</p>
-          <h2>Prototype 觀察面板</h2>
+          <p class="section-kicker">WRITEBACK</p>
+          <h2>${state.editingRecordId ? "修改領用紀錄" : "新增領用紀錄"}</h2>
         </div>
-        <p class="section-helper">這一區示範未來可延伸成主管追蹤區、車備稽核區或補貨提醒區。</p>
       </div>
-
-      <div class="trace-spotlight-grid">
-        <article class="trace-panel">
-          <h3>近期最常領取耗材</h3>
-          <div class="trace-list">
-            ${topItems
-              .map(
-                (item) => `
-                  <div class="trace-list-item">
-                    <div>
-                      <strong>${escapeHtml(item.itemName)}</strong>
-                      <span>${escapeHtml(item.category)}</span>
-                    </div>
-                    <b>${escapeHtml(String(item.total))}</b>
-                  </div>
-                `,
-              )
-              .join("")}
-          </div>
-        </article>
-
-        <article class="trace-panel">
-          <h3>需追蹤的異動</h3>
-          <div class="trace-list">
-            ${alerts
-              .map(
-                (record) => `
-                  <div class="trace-list-item">
-                    <div>
-                      <strong>${escapeHtml(record.itemName)}</strong>
-                      <span>${escapeHtml(formatDate(record.createdAt))} ・ ${escapeHtml(record.team)}</span>
-                    </div>
-                    <b>${record.stockAfter === 0 ? "缺貨" : "低庫存"}</b>
-                  </div>
-                `,
-              )
-              .join("")}
-          </div>
-        </article>
-
-        <article class="trace-panel">
-          <h3>交班待確認事項</h3>
-          <div class="trace-list">
-            ${handoverItems
-              .map(
-                (record) => `
-                  <div class="trace-list-item">
-                    <div>
-                      <strong>${escapeHtml(record.itemName)}</strong>
-                      <span>${escapeHtml(formatDate(record.createdAt))} ・ ${escapeHtml(record.takenBy)} ・ ${escapeHtml(record.team)}</span>
-                    </div>
-                    <b>${record.stockAfter === 0 ? "補貨" : "確認"}</b>
-                  </div>
-                `,
-              )
-              .join("")}
-          </div>
-        </article>
-
-        <article class="trace-panel">
-          <h3>近期案件足跡</h3>
-          <div class="trace-list">
-            ${caseTimeline
-              .map(
-                (record) => `
-                  <div class="trace-list-item">
-                    <div>
-                      <strong>${escapeHtml(record.caseNo)}</strong>
-                      <span>${escapeHtml(record.itemName)} ・ ${escapeHtml(record.vehicleNo || record.team)}</span>
-                    </div>
-                    <b>${escapeHtml(record.takenBy)}</b>
-                  </div>
-                `,
-              )
-              .join("")}
-          </div>
-        </article>
-      </div>
+      <form id="usageForm" class="data-form-grid">
+        <label class="field">
+          <span>領取日期</span>
+          <input name="receiveDate" type="date" value="${escapeHtml(state.form.receiveDate)}" required />
+        </label>
+        <label class="field">
+          <span>領取時間</span>
+          <input name="receiveTime" type="time" value="${escapeHtml(state.form.receiveTime)}" required />
+        </label>
+        <label class="field">
+          <span>領取時段</span>
+          <input name="receivePeriod" value="${escapeHtml(state.form.receivePeriod)}" placeholder="例如 白班 / 夜班" required />
+        </label>
+        <label class="field">
+          <span>類別</span>
+          <select name="category" id="usageCategorySelect">${categoryChoicesHtml(state.form.category)}</select>
+        </label>
+        <label class="field">
+          <span>耗材編號</span>
+          <select name="itemCode" id="usageItemCodeSelect">${supplyOptions}</select>
+        </label>
+        <label class="field">
+          <span>耗材名稱</span>
+          <input name="itemName" value="${escapeHtml(state.form.itemName)}" readonly />
+        </label>
+        <label class="field">
+          <span>領取數量</span>
+          <input name="quantity" type="number" min="1" step="1" value="${escapeHtml(state.form.quantity)}" required />
+        </label>
+        <label class="field">
+          <span>單位</span>
+          <input name="unit" value="${escapeHtml(state.form.unit)}" readonly />
+        </label>
+        <label class="field">
+          <span>領取人</span>
+          <input name="receiver" value="${escapeHtml(state.form.receiver)}" required />
+        </label>
+        <label class="field">
+          <span>所屬單位</span>
+          <select name="station">${stationChoicesHtml(state.form.station)}</select>
+        </label>
+        <label class="field">
+          <span>車號</span>
+          <input name="vehicleNo" value="${escapeHtml(state.form.vehicleNo)}" placeholder="例如 91車" />
+        </label>
+        <label class="field">
+          <span>案件編號</span>
+          <input name="caseNo" value="${escapeHtml(state.form.caseNo)}" placeholder="例如 EMS-20260502-001" />
+        </label>
+        <label class="field">
+          <span>用途</span>
+          <select name="purpose">${purposeChoicesHtml(state.form.purpose)}</select>
+        </label>
+        <label class="field">
+          <span>目前庫存</span>
+          <input value="${selectedSupply ? `${selectedSupply.currentStock} ${selectedSupply.unit}` : "-"}" readonly />
+        </label>
+        <label class="field">
+          <span>領取後庫存預覽</span>
+          <input value="${escapeHtml(getStockPreview())}" readonly />
+        </label>
+        <label class="field field-span-2">
+          <span>備註</span>
+          <textarea name="note" rows="3" placeholder="可填寫補登、追蹤或案件補充說明">${escapeHtml(state.form.note)}</textarea>
+        </label>
+        <div class="form-actions">
+          <button class="primary-button" type="submit">${state.editingRecordId ? "更新領用紀錄" : "新增領用紀錄"}</button>
+          <button id="cancelUsageEditButton" class="secondary-button" type="button" ${state.editingRecordId ? "" : "disabled"}>取消編輯</button>
+        </div>
+      </form>
     </section>
   `;
 }
 
-function bindEvents() {
-  const searchInput = document.querySelector<HTMLInputElement>("#traceSearchInput");
-  const categorySelect = document.querySelector<HTMLSelectElement>("#traceCategoryFilter");
-  const teamSelect = document.querySelector<HTMLSelectElement>("#traceTeamFilter");
-  const periodSelect = document.querySelector<HTMLSelectElement>("#tracePeriodFilter");
-  const resetButton = document.querySelector<HTMLButtonElement>("#traceResetFiltersButton");
+function renderRecordsTable() {
+  const records = getFilteredRecords();
 
-  searchInput?.addEventListener("input", (event) => {
-    state.filters.search = event.currentTarget.value;
-    render();
-  });
-
-  categorySelect?.addEventListener("change", (event) => {
-    state.filters.category = event.currentTarget.value;
-    render();
-  });
-
-  teamSelect?.addEventListener("change", (event) => {
-    state.filters.team = event.currentTarget.value;
-    render();
-  });
-
-  periodSelect?.addEventListener("change", (event) => {
-    state.filters.period = event.currentTarget.value as TraceFilters["period"];
-    render();
-  });
-
-  resetButton?.addEventListener("click", () => {
-    state.filters = {
-      search: "",
-      category: "全部類別",
-      team: "全部單位",
-      period: "all",
-    };
-    render();
-  });
+  return `
+    <section class="section-block">
+      <div class="section-heading">
+        <div>
+          <p class="section-kicker">USAGE LOG</p>
+          <h2>領用紀錄清單</h2>
+        </div>
+      </div>
+      ${
+        records.length === 0
+          ? `<div class="empty-state">目前沒有符合條件的領用紀錄。</div>`
+          : `<div class="table-wrapper">
+              <table>
+                <thead>
+                  <tr>
+                    <th>日期時間</th>
+                    <th>時段</th>
+                    <th>類別 / 耗材</th>
+                    <th>數量</th>
+                    <th>領取人 / 單位</th>
+                    <th>車號 / 案件</th>
+                    <th>用途</th>
+                    <th>領後庫存</th>
+                    <th>備註</th>
+                    ${isAdmin() ? "<th>操作</th>" : ""}
+                  </tr>
+                </thead>
+                <tbody>
+                  ${records
+                    .map(
+                      (record) => `
+                        <tr>
+                          <td>${escapeHtml(record.receiveDate)} ${escapeHtml(record.receiveTime)}</td>
+                          <td>${escapeHtml(record.receivePeriod)}</td>
+                          <td>
+                            <div class="name-cell">
+                              <strong>${escapeHtml(record.itemName)}</strong>
+                              <span>${escapeHtml(record.itemCode)} ・ ${escapeHtml(record.category)}</span>
+                            </div>
+                          </td>
+                          <td>${record.quantity}${escapeHtml(record.unit)}</td>
+                          <td>
+                            <div class="trace-inline-meta">
+                              <strong>${escapeHtml(record.receiver)}</strong>
+                              <span>${escapeHtml(record.station)}</span>
+                            </div>
+                          </td>
+                          <td>
+                            <div class="trace-inline-meta">
+                              <strong>${escapeHtml(record.vehicleNo || "-")}</strong>
+                              <span>${escapeHtml(record.caseNo || "-")}</span>
+                            </div>
+                          </td>
+                          <td>${escapeHtml(record.purpose)}</td>
+                          <td>${record.stockAfterUse}</td>
+                          <td>${escapeHtml(record.note || "-")}</td>
+                          ${
+                            isAdmin()
+                              ? `<td>
+                                  <div class="table-actions">
+                                    <button class="secondary-button small-button" type="button" data-edit-record="${escapeHtml(record.id)}">編輯</button>
+                                    <button class="danger-button small-button" type="button" data-delete-record="${escapeHtml(record.id)}">刪除</button>
+                                  </div>
+                                </td>`
+                              : ""
+                          }
+                        </tr>
+                      `,
+                    )
+                    .join("")}
+                </tbody>
+              </table>
+            </div>`
+      }
+    </section>
+  `;
 }
 
-function render() {
-  const records = getFilteredRecords();
-  const hasData = state.records.length > 0;
-  const categoryOptions = getCategoryOptions();
-  const teamOptions = getTeamOptions();
+function renderPage() {
+  if (!state.session?.profile || !state.session.user.email) {
+    return;
+  }
 
   root.innerHTML = `
     <div class="page-shell">
-      <nav class="top-nav" aria-label="網站導覽">
-        <a class="nav-link" href="${import.meta.env.BASE_URL}">耗材儀表板</a>
-        <a class="nav-link is-active" href="${import.meta.env.BASE_URL}trace.html">領取足跡 Prototype</a>
-      </nav>
-
+      ${renderHeader()}
       <header class="hero hero-trace">
         <div class="hero-copy">
-          <p class="eyebrow">Internal Trace Prototype</p>
-          <h1>領取足跡 Prototype</h1>
+          <p class="eyebrow">EMS INTERNAL USAGE RECORDS</p>
+          <h1>領用紀錄管理</h1>
           <p class="hero-text">
-            這一頁示範未來若把 Google 表單 / Google Sheets 的領取紀錄接進網站，主管與值班人員可以如何快速追蹤領用流向、缺貨風險與車備異動。
+            這一頁使用 Firestore 交易寫入領用紀錄，新增時會同步扣除 supplies.currentStock；若寫入失敗，畫面會直接回報錯誤，不會假裝成功。
           </p>
           <div class="hero-system-tags">
-            <span class="hero-system-tag">值班模式</span>
-            <span class="hero-system-tag">交班追蹤</span>
-            <span class="hero-system-tag">案件回查</span>
-          </div>
-          <div class="hero-actions">
-            <a class="hero-link" href="${import.meta.env.BASE_URL}">回到耗材儀表板</a>
+            <span class="hero-system-tag">${escapeHtml(state.session.user.email)}</span>
+            <span class="hero-system-tag">${escapeHtml(state.session.profile.station)}</span>
+            <span class="hero-system-tag">${escapeHtml(roleLabel(state.session.profile.role))}</span>
           </div>
         </div>
         <div class="hero-meta">
           <div class="meta-panel">
-            <span>資料來源</span>
-            <strong>${escapeHtml("Google 表單 / Google Sheets Prototype")}</strong>
+            <span>頁面用途</span>
+            <strong>新增 / 查詢 / 管理領用紀錄</strong>
           </div>
           <div class="meta-panel">
-            <span>最後同步</span>
-            <strong>${escapeHtml(state.generatedAt ? formatDate(state.generatedAt) : "資料未提供")}</strong>
+            <span>權限範圍</span>
+            <strong>${isAdmin() ? "admin 可新增、修改、刪除" : canWrite() ? "user 可新增領用紀錄" : "viewer 僅可檢視"}</strong>
           </div>
           <div class="meta-panel meta-panel-accent">
-            <span>內部首頁定位</span>
-            <strong>值班人員先看待辦，再查明細</strong>
+            <span>同步邏輯</span>
+            <strong>Firestore transaction 實際扣庫存</strong>
           </div>
         </div>
       </header>
-
-      ${
-        state.error
-          ? `<section class="notice notice-error">${escapeHtml(state.error)}</section>`
-          : ""
-      }
-
+      ${state.error ? `<section class="notice notice-error">${escapeHtml(state.error)}</section>` : ""}
+      ${state.info ? `<section class="notice notice-success">${escapeHtml(state.info)}</section>` : ""}
       <section class="section-block">
         <div class="section-heading">
           <div>
             <p class="section-kicker">SUMMARY</p>
-            <h2>領取摘要</h2>
+            <h2>今日與篩選摘要</h2>
           </div>
-          <p class="section-helper">這裡可延伸成主管每日晨會用的異動概況卡。</p>
         </div>
         <div class="summary-grid trace-summary-grid">
-          ${renderSummary(records)}
+          ${renderSummaryCards()}
         </div>
       </section>
-
-      ${renderControlRibbon(records)}
-
-      ${renderSpotlight(records)}
-
-      <section class="section-block">
-        <div class="section-heading section-heading-stack">
-          <div>
-            <p class="section-kicker">TRACE LOG</p>
-            <h2>領取紀錄查詢</h2>
-          </div>
-          <div class="filters-grid trace-filters-grid">
-            <label class="field">
-              <span>搜尋</span>
-              <input
-                id="traceSearchInput"
-                type="search"
-                placeholder="搜尋耗材、領取人、案件編號"
-                value="${escapeHtml(state.filters.search)}"
-              />
-            </label>
-            <label class="field">
-              <span>類別</span>
-              <select id="traceCategoryFilter">
-                <option value="全部類別">全部類別</option>
-                ${categoryOptions
-                  .map(
-                    (category) => `
-                      <option value="${escapeHtml(category)}" ${
-                        category === state.filters.category ? "selected" : ""
-                      }>${escapeHtml(category)}</option>
-                    `,
-                  )
-                  .join("")}
-              </select>
-            </label>
-            <label class="field">
-              <span>單位</span>
-              <select id="traceTeamFilter">
-                <option value="全部單位">全部單位</option>
-                ${teamOptions
-                  .map(
-                    (team) => `
-                      <option value="${escapeHtml(team)}" ${
-                        team === state.filters.team ? "selected" : ""
-                      }>${escapeHtml(team)}</option>
-                    `,
-                  )
-                  .join("")}
-              </select>
-            </label>
-            <label class="field">
-              <span>期間</span>
-              <select id="tracePeriodFilter">
-                <option value="all" ${state.filters.period === "all" ? "selected" : ""}>全部期間</option>
-                <option value="today" ${state.filters.period === "today" ? "selected" : ""}>近 24 小時</option>
-                <option value="week" ${state.filters.period === "week" ? "selected" : ""}>近 7 日</option>
-              </select>
-            </label>
-            <button id="traceResetFiltersButton" class="reset-button" type="button">重設條件</button>
-          </div>
-        </div>
-
-        ${
-          hasData
-            ? `
-              <div class="table-wrapper">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>時間</th>
-                      <th>耗材</th>
-                      <th>領取資訊</th>
-                      <th>領取人</th>
-                      <th>單位 / 車號</th>
-                      <th>案件 / 庫存</th>
-                      <th>風險</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    ${renderRows(records)}
-                  </tbody>
-                </table>
-              </div>
-              <div class="mobile-list">
-                ${renderMobileCards(records)}
-              </div>
-            `
-            : `<div class="empty-state">目前沒有可顯示的領取紀錄。</div>`
-        }
-
-        ${
-          hasData && records.length === 0
-            ? `<div class="empty-state">目前篩選條件沒有符合的領取紀錄。</div>`
-            : ""
-        }
-      </section>
+      ${renderLowStockAlerts()}
+      ${renderFilters()}
+      ${renderFormSection()}
+      ${renderRecordsTable()}
     </div>
   `;
 
   bindEvents();
 }
 
-async function loadTraceRecords() {
-  try {
-    const response = await fetch(`${import.meta.env.BASE_URL}data/trace-records.json`);
-
-    if (!response.ok) {
-      throw new Error("無法讀取領取足跡資料，請確認 trace-records.json 是否存在。");
-    }
-
-    const data = (await response.json()) as TraceResponse;
-    state.records = data.records;
-    state.generatedAt = data.meta.generatedAt;
-    state.error = null;
-  } catch (error) {
-    state.error = error instanceof Error ? error.message : "領取足跡資料讀取失敗。";
-  } finally {
-    render();
+function render() {
+  if (!state.session) {
+    redirectToLogin();
+    return;
   }
+
+  if (!state.session.profile) {
+    window.location.href = `${import.meta.env.BASE_URL}index.html`;
+    return;
+  }
+
+  renderPage();
 }
 
-render();
-void loadTraceRecords();
+function bindFilter(id: string, key: keyof UsageFilters) {
+  const element = document.querySelector<HTMLInputElement | HTMLSelectElement>(id);
+
+  element?.addEventListener("input", (event) => {
+    state.filters[key] = event.currentTarget.value;
+    renderPage();
+  });
+
+  element?.addEventListener("change", (event) => {
+    state.filters[key] = event.currentTarget.value;
+    renderPage();
+  });
+}
+
+function fillFormFromRecord(record: UsageRecord) {
+  state.editingRecordId = record.id;
+  state.form = {
+    receiveDate: record.receiveDate,
+    receiveTime: record.receiveTime,
+    receivePeriod: record.receivePeriod,
+    category: record.category,
+    itemCode: record.itemCode,
+    itemName: record.itemName,
+    quantity: String(record.quantity),
+    unit: record.unit,
+    receiver: record.receiver,
+    station: record.station,
+    vehicleNo: record.vehicleNo,
+    caseNo: record.caseNo,
+    purpose: record.purpose,
+    note: record.note,
+  };
+}
+
+function bindEvents() {
+  document.querySelector<HTMLButtonElement>("#logoutButton")?.addEventListener("click", async () => {
+    await signOutCurrentUser();
+    redirectToLogin();
+  });
+
+  bindFilter("#filterDateFrom", "dateFrom");
+  bindFilter("#filterDateTo", "dateTo");
+  bindFilter("#filterCategory", "category");
+  bindFilter("#filterStation", "station");
+  bindFilter("#filterVehicleNo", "vehicleNo");
+  bindFilter("#filterPurpose", "purpose");
+  bindFilter("#filterKeyword", "keyword");
+
+  document.querySelector<HTMLButtonElement>("#resetFiltersButton")?.addEventListener("click", () => {
+    state.filters = { ...defaultFilters };
+    renderPage();
+  });
+
+  document.querySelector<HTMLSelectElement>("#usageCategorySelect")?.addEventListener("change", (event) => {
+    state.form.category = event.currentTarget.value;
+    const firstSupply = state.supplies.find((item) => item.category === state.form.category);
+    if (firstSupply) {
+      setSupplyFieldsByItemCode(firstSupply.itemCode);
+    }
+    renderPage();
+  });
+
+  document.querySelector<HTMLSelectElement>("#usageItemCodeSelect")?.addEventListener("change", (event) => {
+    setSupplyFieldsByItemCode(event.currentTarget.value);
+    renderPage();
+  });
+
+  document.querySelector<HTMLButtonElement>("#cancelUsageEditButton")?.addEventListener("click", () => {
+    resetForm();
+    renderPage();
+  });
+
+  document.querySelector<HTMLFormElement>("#usageForm")?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+
+    const formData = new FormData(event.currentTarget);
+    const payload: UsageRecordFormInput = {
+      receiveDate: String(formData.get("receiveDate") ?? ""),
+      receiveTime: String(formData.get("receiveTime") ?? ""),
+      receivePeriod: String(formData.get("receivePeriod") ?? ""),
+      category: String(formData.get("category") ?? ""),
+      itemCode: String(formData.get("itemCode") ?? ""),
+      itemName: String(formData.get("itemName") ?? ""),
+      quantity: String(formData.get("quantity") ?? ""),
+      unit: String(formData.get("unit") ?? ""),
+      receiver: String(formData.get("receiver") ?? ""),
+      station: String(formData.get("station") ?? ""),
+      vehicleNo: String(formData.get("vehicleNo") ?? ""),
+      caseNo: String(formData.get("caseNo") ?? ""),
+      purpose: String(formData.get("purpose") ?? ""),
+      note: String(formData.get("note") ?? ""),
+    };
+
+    try {
+      if (state.editingRecordId) {
+        await updateUsageRecord(state.editingRecordId, payload, actorIdentity());
+        state.info = "領用紀錄已更新，相關庫存也已同步調整。";
+      } else {
+        await createUsageRecord(payload, actorIdentity());
+        state.info = "領用紀錄已建立，庫存已同步扣除。";
+      }
+
+      state.error = null;
+      resetForm();
+      await refreshData();
+    } catch (error) {
+      state.error = error instanceof Error ? error.message : "寫入領用紀錄失敗。";
+      renderPage();
+    }
+  });
+
+  document.querySelectorAll<HTMLButtonElement>("[data-edit-record]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const record = state.usageRecords.find((item) => item.id === button.dataset.editRecord);
+
+      if (!record) {
+        return;
+      }
+
+      fillFormFromRecord(record);
+      renderPage();
+    });
+  });
+
+  document.querySelectorAll<HTMLButtonElement>("[data-delete-record]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const recordId = button.dataset.deleteRecord ?? "";
+
+      if (!recordId || !window.confirm("確定刪除這筆領用紀錄並回補庫存？")) {
+        return;
+      }
+
+      try {
+        await deleteUsageRecord(recordId, actorIdentity());
+        state.error = null;
+        state.info = "領用紀錄已刪除，庫存已回補。";
+        await refreshData();
+      } catch (error) {
+        state.error = error instanceof Error ? error.message : "刪除領用紀錄失敗。";
+        renderPage();
+      }
+    });
+  });
+}
+
+showLoading("正在驗證登入狀態...");
+
+observeAuthSession(
+  async (session) => {
+    state.session = session;
+    state.error = null;
+
+    if (!session) {
+      state.isLoading = false;
+      render();
+      return;
+    }
+
+    if (!session.profile) {
+      state.isLoading = false;
+      render();
+      return;
+    }
+
+    if (!state.form.receiver) {
+      state.form.receiver = session.profile.displayName;
+      state.form.station = session.profile.station;
+    }
+
+    await refreshData();
+  },
+  (error) => {
+    state.isLoading = false;
+    state.error = error.message;
+    render();
+  },
+);

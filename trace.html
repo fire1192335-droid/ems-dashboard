@@ -3,10 +3,14 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>領取足跡 Prototype | 救護耗材控管儀表板</title>
+    <meta name="theme-color" content="#0f766e" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <title>領用紀錄管理 | 救護耗材控管儀表板</title>
     <meta
       name="description"
-      content="救護耗材領取足跡 prototype，示範內部查詢頁可呈現的領取紀錄、異動摘要與追蹤欄位。"
+      content="消防救護單位內部使用的領用紀錄管理頁，支援 Firestore 寫入、扣庫存與篩選查詢。"
     />
   </head>
   <body>
@@ -14,13 +18,14 @@
       <div class="bootstrap-shell">
         <div class="bootstrap-card">
           <div class="bootstrap-nav">
-            <a class="bootstrap-link" href="./index.html">耗材儀表板</a>
-            <a class="bootstrap-link is-active" href="./trace.html">領取足跡 Prototype</a>
+            <a class="bootstrap-link" href="./index.html">儀表板</a>
+            <a class="bootstrap-link is-active" href="./trace.html">領用紀錄</a>
+            <a class="bootstrap-link" href="./login.html">登入</a>
           </div>
-          <p class="bootstrap-eyebrow">EMS TRACE PROTOTYPE</p>
-          <h1>領取足跡 Prototype</h1>
-          <p class="bootstrap-text">頁面載入中，請稍候片刻。</p>
-          <p class="bootstrap-subtext">若未顯示，請重新整理頁面或稍後再試。</p>
+          <p class="bootstrap-eyebrow">EMS INTERNAL USAGE RECORDS</p>
+          <h1>領用紀錄管理</h1>
+          <p class="bootstrap-text">正在驗證登入狀態並載入領用紀錄，請稍候。</p>
+          <p class="bootstrap-subtext">若尚未登入，系統將自動導向登入頁。</p>
         </div>
       </div>
     </div>
@@ -28,12 +33,13 @@
       <div class="bootstrap-shell">
         <div class="bootstrap-card">
           <div class="bootstrap-nav">
-            <a class="bootstrap-link" href="./index.html">耗材儀表板</a>
-            <a class="bootstrap-link is-active" href="./trace.html">領取足跡 Prototype</a>
+            <a class="bootstrap-link" href="./index.html">儀表板</a>
+            <a class="bootstrap-link is-active" href="./trace.html">領用紀錄</a>
+            <a class="bootstrap-link" href="./login.html">登入</a>
           </div>
-          <p class="bootstrap-eyebrow">EMS TRACE PROTOTYPE</p>
-          <h1>領取足跡 Prototype</h1>
-          <p class="bootstrap-text">此頁面需要啟用 JavaScript 才能正常顯示資料。</p>
+          <p class="bootstrap-eyebrow">EMS INTERNAL USAGE RECORDS</p>
+          <h1>領用紀錄管理</h1>
+          <p class="bootstrap-text">此頁面需要啟用 JavaScript 才能登入並讀取 Firestore。</p>
         </div>
       </div>
     </noscript>

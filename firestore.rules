@@ -1,8 +1,63 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /{document=**} {
-      allow read, write: if false;
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isSelf(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function userDocPath() {
+      return /databases/$(database)/documents/users/$(request.auth.uid);
+    }
+
+    function hasUserProfile() {
+      return isSignedIn() && exists(userDocPath());
+    }
+
+    function currentRole() {
+      return hasUserProfile() ? get(userDocPath()).data.role : null;
+    }
+
+    function isAdmin() {
+      return currentRole() == "admin";
+    }
+
+    function isUser() {
+      return currentRole() == "user";
+    }
+
+    function validRole(role) {
+      return role in ["admin", "user", "viewer"];
+    }
+
+    function validStation(station) {
+      return station in ["第一分隊", "第二分隊", "第三分隊", "第四分隊"];
+    }
+
+    match /supplies/{supplyId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /usageRecords/{recordId} {
+      allow read: if isSignedIn();
+      allow create: if isAdmin() || isUser();
+      allow update, delete: if isAdmin();
+    }
+
+    match /users/{userId} {
+      allow read: if isAdmin() || isSelf(userId);
+      allow create: if isSelf(userId)
+        && !hasUserProfile()
+        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.displayName is string
+        && validStation(request.resource.data.station)
+        && request.resource.data.role == "viewer"
+        && request.resource.data.createdAt is timestamp;
+      allow update, delete: if isAdmin();
     }
   }
 }
